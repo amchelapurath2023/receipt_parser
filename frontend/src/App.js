@@ -10,7 +10,7 @@ function App() {
     formData.set("receipt", fileInput.current.files[0]);
 
     try {
-      const response = await fetch('/profile', {
+      const response = await fetch('/upload', {
         method: "POST",
         body: formData
       });
