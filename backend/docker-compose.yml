@@ -6,3 +6,5 @@ services:
     volumes:
       - .:/usr/src/app
     command: air run cmd/main.go -b 0.0.0.0
+    env_file:
+      - .env

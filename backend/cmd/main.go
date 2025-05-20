@@ -46,10 +46,10 @@ func main(){
 		})
 		
 		if err != nil {
-			return c.Status(code).SendString("File was parsed incorrectly")
+			return c.Status(code).SendString("File couldn't be parsed")
 		}
 
-		fmt.Println(resp)
+		//fmt.Println(resp[1][])
 
 		return c.SendStatus(fiber.StatusOK) 
 	  })
