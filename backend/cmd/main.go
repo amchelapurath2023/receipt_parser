@@ -1,21 +1,57 @@
 package main
 
-import "github.com/gofiber/fiber/v2"
 import "fmt"
+import "github.com/gofiber/fiber/v2"
+import "github.com/aws/aws-sdk-go-v2/service/textract"
+import "github.com/aws/aws-sdk-go-v2/service/textract/types"
+import "github.com/aws/aws-sdk-go-v2/config"
+import "context"
+import "bytes"
+import "io"
 
 func main(){
 	app := fiber.New()
-
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello Anshul!")
-	})
-
+	code := fiber.StatusInternalServerError
 
 	app.Post("/upload", func(c *fiber.Ctx) error {
-		file, _ := c.FormFile("receipt")
-		c.SaveFile(file, fmt.Sprintf("./%s", file.Filename))
+		file, err := c.FormFile("receipt")
+
+		if err != nil {
+			return c.Status(code).SendString("File could not be uploaded")
+		}
+
+		stream, err := file.Open()
+
+		if err != nil {
+			return c.Status(code).SendString("File could not be opened")
+		}
+
+		ctx := context.TODO()
+		cfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			return c.Status(code).SendString("Couldn't get AWS configs")
+		}
+
+		textractClient := textract.NewFromConfig(cfg)
+
+		buf := bytes.NewBuffer(nil)
+		if _, err := io.Copy(buf, stream); err != nil {
+			return c.Status(code).SendString("File was probably too large")
+		}
+
+		resp, err := textractClient.AnalyzeExpense(ctx, &textract.AnalyzeExpenseInput{
+			Document: &types.Document {
+			  Bytes: buf.Bytes(),
+			},
+		})
+		
+		if err != nil {
+			return c.Status(code).SendString("File was parsed incorrectly")
+		}
+
+		fmt.Println(resp)
+
 		return c.SendStatus(fiber.StatusOK) 
-		//return c.SaveFile(file, fmt.Sprintf("./%s", file.Filename))
 	  })
 	app.Listen(":8000")
 }
