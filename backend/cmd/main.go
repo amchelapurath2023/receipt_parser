@@ -1,13 +1,27 @@
 package main
 
-import "fmt"
 import "github.com/gofiber/fiber/v2"
 import "github.com/aws/aws-sdk-go-v2/service/textract"
 import "github.com/aws/aws-sdk-go-v2/service/textract/types"
 import "github.com/aws/aws-sdk-go-v2/config"
+import "github.com/aws/aws-sdk-go-v2/aws"
 import "context"
 import "bytes"
 import "io"
+import "strings"
+import "strconv"
+
+
+type LineItem struct {
+	Item string `json:"item_name"`
+	Price float64 `json:"price"`
+}
+
+type ReceiptResponse struct {
+	Items []LineItem `json:"items"`
+	Total float64 `json:"total"`
+	Tax float64`json:"tax"`
+}
 
 func main(){
 	app := fiber.New()
@@ -44,14 +58,56 @@ func main(){
 			  Bytes: buf.Bytes(),
 			},
 		})
-		
 		if err != nil {
 			return c.Status(code).SendString("File couldn't be parsed")
 		}
+		
+		var items []LineItem
 
-		//fmt.Println(resp[1][])
+		var tax float64
+		var total float64
 
-		return c.SendStatus(fiber.StatusOK) 
+
+		for _, field := range resp.ExpenseDocuments[0].SummaryFields {
+			if aws.ToString(field.Type.Text) == "TAX" {
+				tax, _ = strconv.ParseFloat(aws.ToString(field.ValueDetection.Text), 64)
+			}
+			if aws.ToString(field.Type.Text) == "TOTAL" {
+				total, _ = strconv.ParseFloat(aws.ToString(field.ValueDetection.Text), 64)
+			}
+			if total != 0 && tax != 0 {
+				break
+			}
+
+		}
+
+
+		for _, lineItem := range resp.ExpenseDocuments[0].LineItemGroups[0].LineItems {
+			var itemName string
+			var itemPrice float64
+			for _, field := range lineItem.LineItemExpenseFields{
+				fieldType := aws.ToString(field.Type.Text)
+				fieldValue := aws.ToString(field.ValueDetection.Text)
+				if fieldType == "ITEM" {
+					itemName = fieldValue
+				}
+				if fieldType == "PRICE" {
+					fields := strings.Fields(fieldValue)
+					clean := fields[0]
+					itemPrice, _ = strconv.ParseFloat(clean, 64)
+				}
+			}
+			items = append(items, LineItem{Item: itemName, Price: itemPrice})
+		}
+		
+
+		response := ReceiptResponse {
+			Items:    items,
+			Total: 	  total,
+			Tax:      tax,
+		}
+		
+		return c.JSON(response)
 	  })
 	app.Listen(":8000")
 }
