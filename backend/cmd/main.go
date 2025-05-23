@@ -10,7 +10,7 @@ import "bytes"
 import "io"
 import "strings"
 import "strconv"
-
+import "fmt"
 
 type LineItem struct {
 	Item string `json:"item_name"`
@@ -20,7 +20,8 @@ type LineItem struct {
 type ReceiptResponse struct {
 	Items []LineItem `json:"items"`
 	Total float64 `json:"total"`
-	Tax float64`json:"tax"`
+	Tax float64 `json:"tax"`
+	Matches bool `json:"matches"`
 }
 
 func main(){
@@ -81,7 +82,7 @@ func main(){
 
 		}
 
-
+		cum_sum := 0.0
 		for _, lineItem := range resp.ExpenseDocuments[0].LineItemGroups[0].LineItems {
 			var itemName string
 			var itemPrice float64
@@ -97,14 +98,18 @@ func main(){
 					itemPrice, _ = strconv.ParseFloat(clean, 64)
 				}
 			}
+			cum_sum += itemPrice
 			items = append(items, LineItem{Item: itemName, Price: itemPrice})
 		}
 		
+		fmt.Println("cumulative price calculate:", cum_sum)
+		matches := (total - tax - cum_sum) < 0.01
 
 		response := ReceiptResponse {
 			Items:    items,
 			Total: 	  total,
 			Tax:      tax,
+			Matches: matches,
 		}
 		
 		return c.JSON(response)
