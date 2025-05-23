@@ -1,1 +1,3 @@
-receipt_parser
+## Demo
+
+![Demo](assets/demo.gif)
