@@ -15,7 +15,6 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 - **Backend**: [Go Fiber](https://gofiber.io/) — for fast, minimalist API development  
 - **Frontend**: [React](https://react.dev/) + [PrimeReact](https://primereact.org/) — for dynamic tables and UI  
 - **OCR**: [Amazon Textract](https://aws.amazon.com/textract/) — to extract structured line items from receipts  
-- **Storage**: [Amazon S3](https://aws.amazon.com/s3/) — to hold uploaded PDF files before processing
 
 ---
 
@@ -32,7 +31,7 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 4. The app shows whether the total matches the sum of all items.
 5. Click **Calculate** to download a CSV with each person’s total (tax distributed proportionally).
 
-> 💡 **Note**: If your receipt is longer than one page, use an online tool to flatten it into a single-page PDF. Amazon Textract’s `AnalyzeExpense` does not currently support multi-page PDFs directly from memory.
+> 💡 **Note**: If your receipt is longer than one page, use an [online tool] to flatten it into a single-page PDF. Amazon Textract’s `AnalyzeExpense` does not currently support multi-page PDFs directly from memory. NOT SPONOSORED: (https://avepdf.com/convert-to-one-page-pdf)
 
 ---
 
@@ -41,7 +40,10 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 ### Prerequisites
 
 - [Docker](https://www.docker.com/)
-- AWS credentials with permission to use Textract and S3
+- AWS credentials with permission to use Textract
+- [Golang] (https://go.dev/)
+- [React] (https://react.dev/)
+- [Prime React] (https://react.dev/)
 
 ## 🔧 Setup Instructions
 
