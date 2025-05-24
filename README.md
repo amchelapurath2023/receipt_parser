@@ -20,7 +20,7 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 
 ## 📥 How It Works
 
-1. Upload a **one-page grocery receipt** (PDF format only).
+1. Upload a **one-page grocery receipt** (Haven't tested with photos yet).
 2. Amazon Textract analyzes the receipt and extracts:
    - Each line item (item name, price)
    - The subtotal and tax
@@ -31,7 +31,7 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 4. The app shows whether the total matches the sum of all items.
 5. Click **Calculate** to download a CSV with each person’s total (tax distributed proportionally).
 
-> 💡 **Note**: If your receipt is longer than one page, use an [online tool] to flatten it into a single-page PDF. Amazon Textract’s `AnalyzeExpense` does not currently support multi-page PDFs directly from memory. NOT SPONOSORED: (https://avepdf.com/convert-to-one-page-pdf)
+> 💡 **Note**: If your receipt is longer than one page, use an [online tool] to flatten it into a single-page PDF. Amazon Textract’s `AnalyzeExpense` does not currently support multi-page PDFs directly from memory. NOT SPONOSORED: https://avepdf.com/convert-to-one-page-pdf
 
 ---
 
@@ -41,9 +41,9 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 
 - [Docker](https://www.docker.com/)
 - AWS credentials with permission to use Textract
-- [Golang] (https://go.dev/)
-- [React] (https://react.dev/)
-- [Prime React] (https://react.dev/)
+- [Golang](https://go.dev/)
+- [React](https://react.dev/)
+- [Prime React](https://react.dev/)
 
 ## 🔧 Setup Instructions
 
