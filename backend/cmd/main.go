@@ -1,16 +1,18 @@
 package main
 
-import "github.com/gofiber/fiber/v2"
-import "github.com/aws/aws-sdk-go-v2/service/textract"
-import "github.com/aws/aws-sdk-go-v2/service/textract/types"
-import "github.com/aws/aws-sdk-go-v2/config"
-import "github.com/aws/aws-sdk-go-v2/aws"
-import "context"
-import "bytes"
-import "io"
-import "strings"
-import "strconv"
-import "fmt"
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/aws/aws-sdk-go-v2/service/textract"
+	"github.com/aws/aws-sdk-go-v2/service/textract/types"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"context"
+	"bytes"
+	"io"
+	"strings"
+	"strconv"
+	"sync"
+)
 
 type LineItem struct {
 	Item string `json:"item_name"`
@@ -24,19 +26,22 @@ type ReceiptResponse struct {
 	Matches bool `json:"matches"`
 }
 
+type TextractResult struct {
+	Response *textract.AnalyzeExpenseOutput
+	Err error
+}
+
 func main(){
 	app := fiber.New()
 	code := fiber.StatusInternalServerError
 
 	app.Post("/upload", func(c *fiber.Ctx) error {
 		file, err := c.FormFile("receipt")
-
 		if err != nil {
 			return c.Status(code).SendString("File could not be uploaded")
 		}
 
 		stream, err := file.Open()
-
 		if err != nil {
 			return c.Status(code).SendString("File could not be opened")
 		}
@@ -54,20 +59,33 @@ func main(){
 			return c.Status(code).SendString("File was probably too large")
 		}
 
-		resp, err := textractClient.AnalyzeExpense(ctx, &textract.AnalyzeExpenseInput{
-			Document: &types.Document {
-			  Bytes: buf.Bytes(),
-			},
-		})
-		if err != nil {
+		resultChan := make(chan TextractResult, 1)
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		// Run AnalyzeExpense in goroutine
+		go func() {
+			defer wg.Done()
+			resp, err := textractClient.AnalyzeExpense(ctx, &textract.AnalyzeExpenseInput{
+				Document: &types.Document{
+					Bytes: buf.Bytes(),
+				},
+			})
+			resultChan <- TextractResult{Response: resp, Err: err}
+		}()
+
+		wg.Wait()
+		close(resultChan)
+
+		result := <-resultChan
+		if result.Err != nil {
 			return c.Status(code).SendString("File couldn't be parsed")
 		}
-		
-		var items []LineItem
+		resp := result.Response
 
+		var items []LineItem
 		var tax float64
 		var total float64
-
 
 		for _, field := range resp.ExpenseDocuments[0].SummaryFields {
 			if aws.ToString(field.Type.Text) == "TAX" {
@@ -79,14 +97,13 @@ func main(){
 			if total != 0 && tax != 0 {
 				break
 			}
-
 		}
 
 		cum_sum := 0.0
 		for _, lineItem := range resp.ExpenseDocuments[0].LineItemGroups[0].LineItems {
 			var itemName string
 			var itemPrice float64
-			for _, field := range lineItem.LineItemExpenseFields{
+			for _, field := range lineItem.LineItemExpenseFields {
 				fieldType := aws.ToString(field.Type.Text)
 				fieldValue := aws.ToString(field.ValueDetection.Text)
 				if fieldType == "ITEM" {
@@ -101,18 +118,18 @@ func main(){
 			cum_sum += itemPrice
 			items = append(items, LineItem{Item: itemName, Price: itemPrice})
 		}
-		
-		fmt.Println("cumulative price calculate:", cum_sum)
+
 		matches := (total - tax - cum_sum) < 0.01
 
-		response := ReceiptResponse {
-			Items:    items,
-			Total: 	  total,
-			Tax:      tax,
+		response := ReceiptResponse{
+			Items:   items,
+			Total:   total,
+			Tax:     tax,
 			Matches: matches,
 		}
-		
+
 		return c.JSON(response)
-	  })
+	})
+
 	app.Listen(":8000")
 }

@@ -15,6 +15,9 @@ function App() {
   const [total, setSubtotal] = useState(0);
   const [matches, setMatches] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [rtEndToEnd, setRtEndToEnd] = useState(null); 
+
+
 
 
   const priceBodyTemplate = (rowData) => {
@@ -105,11 +108,13 @@ function App() {
     formData.set('receipt', fileInput.current.files[0]);
 
     setLoading(true);
+    const t0 = performance.now();   // more precise than Date.now()
     try {
       const response = await fetch('/upload', {
         method: 'POST',
         body: formData,
       });
+      setRtEndToEnd( (performance.now() - t0).toFixed(0) ); // whole ms
       const parsedResponse = await response.json();
       const parsed = parsedResponse.items.map((item) => ({
         ...item,
@@ -153,6 +158,13 @@ function App() {
           ⚠️ Total price mismatch: Items may be missing or prices may be incorrect.
         </div>
       )}
+
+      {rtEndToEnd && (
+  <p style={{marginTop: '0.5rem'}}>
+    ⏲️ End-to-end time: <strong>{rtEndToEnd} ms</strong>
+  </p>
+)}
+
 
       <DataTable
         value={items}
