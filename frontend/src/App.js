@@ -8,6 +8,8 @@ import './App.css';
 import 'primereact/resources/themes/lara-light-indigo/theme.css';
 import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
+import { useCollaborativeReceipt } from "./useCollaborativeReceipt";
+
 
 function App() {
   const fileInput = createRef();
@@ -16,7 +18,9 @@ function App() {
   const [matches, setMatches] = useState(true);
   const [loading, setLoading] = useState(false);
   const [rtEndToEnd, setRtEndToEnd] = useState(null); 
-
+  const [sessionId, setSessionId] = useState("demo"); // Temporary static ID for now
+  const { broadcast } = useCollaborativeReceipt(sessionId, items, setItems);
+  
 
 
 
@@ -68,7 +72,9 @@ function App() {
     setItems((prevItems) =>
       prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
     );
+    broadcast({ type: "update_item", item: updatedItem });
   };
+  
 
   const textEditor = (options) => (
     <InputText
@@ -87,20 +93,21 @@ function App() {
   );
 
   const handleAddRow = () => {
-    setItems((prev) => [
-      ...prev,
-      {
-        id: uuid(),
-        item_name: '',
-        price: 0,
-        assignee: '',
-      },
-    ]);
-  };
+    const newItem = {
+      id: uuid(),
+      item_name: '',
+      price: 0,
+      assignee: '',
+    };
+    setItems((prev) => [...prev, newItem]);
+    broadcast({ type: "add_item", item: newItem });
+  };  
 
   const handleDeleteRow = (id) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
+    broadcast({ type: "delete_item", id });
   };
+  
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -124,7 +131,11 @@ function App() {
       setItems(parsed);
       setSubtotal(parsedResponse.total);
       setMatches(parsedResponse.matches);
+<<<<<<< HEAD
 
+=======
+      broadcast({ type: "init_receipt", items: JSON.parse(JSON.stringify(parsed)), total: parsedResponse.total, tax: parsedResponse.tax });
+>>>>>>> 9fd69ab (added websocket for collaborative edits)
       if (response.ok) {
         alert('File uploaded');
       } else {

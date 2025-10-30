@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/aws/aws-sdk-go-v2/service/textract"
 	"github.com/aws/aws-sdk-go-v2/service/textract/types"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -13,6 +15,10 @@ import (
 	"strconv"
 	"sync"
 )
+
+type Client struct{
+	Conn *websocket.Conn
+}
 
 type LineItem struct {
 	Item string `json:"item_name"`
@@ -31,9 +37,20 @@ type TextractResult struct {
 	Err error
 }
 
+var (
+	rooms = make(map[string][]*Client)
+	roomsMu sync.Mutex
+)
+
 func main(){
 	app := fiber.New()
 	code := fiber.StatusInternalServerError
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:3000",
+		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowMethods: "GET,POST,OPTIONS",
+	}))
 
 	app.Post("/upload", func(c *fiber.Ctx) error {
 		file, err := c.FormFile("receipt")
@@ -130,6 +147,48 @@ func main(){
 
 		return c.JSON(response)
 	})
+
+	app.Get("/ws/:session", websocket.New(func(c *websocket.Conn) {
+		sessionID := c.Params("session")
+	
+		client := &Client{Conn: c}
+	
+		// Add client to room
+		roomsMu.Lock()
+		rooms[sessionID] = append(rooms[sessionID], client)
+		roomsMu.Unlock()
+	
+		defer func() {
+			// Remove client when disconnected
+			roomsMu.Lock()
+			clients := rooms[sessionID]
+			for i, cl := range clients {
+				if cl == client {
+					rooms[sessionID] = append(clients[:i], clients[i+1:]...)
+					break
+				}
+			}
+			roomsMu.Unlock()
+			c.Close()
+		}()
+	
+		// Listen for messages from this client
+		for {
+			_, msg, err := c.ReadMessage()
+			if err != nil {
+				break // client disconnected
+			}
+	
+
+			roomsMu.Lock()
+			for _, cl := range rooms[sessionID] {
+				if cl != client {
+					_ = cl.Conn.WriteMessage(websocket.TextMessage, msg)
+				}
+			}
+			roomsMu.Unlock()
+		}
+	}))
 
 	app.Listen(":8000")
 }

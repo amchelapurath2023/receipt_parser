@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  # Go backend
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: receipt_api
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: ["air", "-c", ".air.toml"]
