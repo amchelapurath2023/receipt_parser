@@ -52,6 +52,16 @@ func main(){
 		AllowMethods: "GET,POST,OPTIONS",
 	}))
 
+	app.Use(limiter.New(limiter.Config{
+		Max: 5,
+		Expiration: 1 * time.Minute,
+	}))
+	
+	app.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+	
+
 	app.Post("/upload", func(c *fiber.Ctx) error {
 		file, err := c.FormFile("receipt")
 		if err != nil {
