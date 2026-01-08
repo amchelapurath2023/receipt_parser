@@ -86,25 +86,12 @@ func main(){
 			return c.Status(code).SendString("File was probably too large")
 		}
 
-		resultChan := make(chan TextractResult, 1)
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		// Run AnalyzeExpense in goroutine
-		go func() {
-			defer wg.Done()
-			resp, err := textractClient.AnalyzeExpense(ctx, &textract.AnalyzeExpenseInput{
-				Document: &types.Document{
-					Bytes: buf.Bytes(),
-				},
-			})
-			resultChan <- TextractResult{Response: resp, Err: err}
-		}()
-
-		wg.Wait()
-		close(resultChan)
-
-		result := <-resultChan
+		resp, err := textractClient.AnalyzeExpense(ctx, &textract.AnalyzeExpenseInput{
+			Document: &types.Document{
+				Bytes: buf.Bytes(),
+			},
+		})
+		
 		if result.Err != nil {
 			return c.Status(code).SendString("File couldn't be parsed")
 		}
