@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import { Header } from '@/components/receipt/Header';
 import { SessionBar } from '@/components/receipt/SessionBar';
 import { UploadZone } from '@/components/receipt/UploadZone';
@@ -22,23 +22,79 @@ const Index = () => {
   const handleItemsUpdate = useCallback((newItems: typeof items) => setItems(newItems), [setItems]);
   const handlePeopleUpdate = useCallback((newPeople: typeof people) => setPeople(newPeople), [setPeople]);
 
-  const { isConnected, connectedUsers, sendItems, sendPeople } = useWebSocket({
+  const { isConnected, connectedUsers, sendItems, sendPeople, sendSync } = useWebSocket({
     sessionId, onItemsUpdate: handleItemsUpdate, onPeopleUpdate: handlePeopleUpdate,
   });
 
+  // Send full state sync when connection is established
+  useEffect(() => {
+    if (isConnected && (items.length > 0 || people.length > 0)) {
+      sendSync(items, people);
+    }
+  }, [isConnected]);
+
   const handleUpdateItem = useCallback((id: string, updates: Partial<typeof items[0]>) => {
+    const updatedItems = items.map(item => item.id === id ? { ...item, ...updates } : item);
     updateItem(id, updates);
-    sendItems(items.map(item => item.id === id ? { ...item, ...updates } : item));
+    sendItems(updatedItems);
   }, [updateItem, items, sendItems]);
 
-  const handleDeleteItem = useCallback((id: string) => { deleteItem(id); sendItems(items.filter(item => item.id !== id)); }, [deleteItem, items, sendItems]);
-  const handleAddItem = useCallback(() => { const newItem = addItem(); sendItems([...items, newItem]); }, [addItem, items, sendItems]);
-  const handleToggleAssignment = useCallback((itemId: string, personName: string) => toggleAssignment(itemId, personName), [toggleAssignment]);
-  const handleAddPerson = useCallback((name: string) => { const newPerson = addPerson(name); sendPeople([...people, newPerson]); }, [addPerson, people, sendPeople]);
-  const handleRemovePerson = useCallback((id: string) => { removePerson(id); sendPeople(people.filter(p => p.id !== id)); }, [removePerson, people, sendPeople]);
-  const handleJoinSession = useCallback((newSessionId: string) => { reset(); setSessionId(newSessionId); }, [reset, setSessionId]);
-  const handleNewSession = useCallback(() => { reset(); generateNewSession(); }, [reset, generateNewSession]);
-  const handleUploadSuccess = useCallback((data: { items: typeof items; subtotal: number; tax: number; total: number; }) => { loadReceiptData(data); sendItems(data.items); }, [loadReceiptData, sendItems]);
+  const handleDeleteItem = useCallback((id: string) => { 
+    const filteredItems = items.filter(item => item.id !== id);
+    deleteItem(id); 
+    sendItems(filteredItems); 
+  }, [deleteItem, items, sendItems]);
+
+  const handleAddItem = useCallback(() => { 
+    const newItem = addItem(); 
+    sendItems([...items, newItem]); 
+  }, [addItem, items, sendItems]);
+
+  // FIX: Now syncs item assignments
+  const handleToggleAssignment = useCallback((itemId: string, personName: string) => {
+    toggleAssignment(itemId, personName);
+    // Send updated items after assignment change
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        const assigned = new Set(item.assignedTo);
+        if (assigned.has(personName)) {
+          assigned.delete(personName);
+        } else {
+          assigned.add(personName);
+        }
+        return { ...item, assignedTo: Array.from(assigned) };
+      }
+      return item;
+    });
+    sendItems(updatedItems);
+  }, [toggleAssignment, items, sendItems]);
+
+  const handleAddPerson = useCallback((name: string) => { 
+    const newPerson = addPerson(name); 
+    sendPeople([...people, newPerson]); 
+  }, [addPerson, people, sendPeople]);
+
+  const handleRemovePerson = useCallback((id: string) => { 
+    const filteredPeople = people.filter(p => p.id !== id);
+    removePerson(id); 
+    sendPeople(filteredPeople); 
+  }, [removePerson, people, sendPeople]);
+
+  const handleJoinSession = useCallback((newSessionId: string) => { 
+    reset(); 
+    setSessionId(newSessionId); 
+  }, [reset, setSessionId]);
+
+  const handleNewSession = useCallback(() => { 
+    reset(); 
+    generateNewSession(); 
+  }, [reset, generateNewSession]);
+
+  // FIX: Send full sync when receipt is uploaded
+  const handleUploadSuccess = useCallback((data: { items: typeof items; subtotal: number; tax: number; total: number; }) => { 
+    loadReceiptData(data); 
+    sendSync(data.items, people);
+  }, [loadReceiptData, sendSync, people]);
 
   const summaries = useMemo(() => calculateSplit(), [calculateSplit]);
 
