@@ -58,16 +58,19 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate, onRecei
         } else if (data.type === 'people') {
           onPeopleUpdate(data.payload);
         } else if (data.type === 'sync') {
-          // Handle full state sync
-          if (data.payload.items) onItemsUpdate(data.payload.items);
+          console.log('Received sync:', data.payload);
+          // Handle full state sync - let the receipt data handler take care of items
           if (data.payload.people) onPeopleUpdate(data.payload.people);
           if (onReceiptDataUpdate) {
             onReceiptDataUpdate({
-              subtotal: data.payload.subtotal,
-              tax: data.payload.tax,
-              total: data.payload.total,
-              items: data.payload.items
+              subtotal: data.payload.subtotal || 0,
+              tax: data.payload.tax || 0,
+              total: data.payload.total || 0,
+              items: data.payload.items || []
             });
+          } else if (data.payload.items) {
+            // Fallback if no receipt data handler
+            onItemsUpdate(data.payload.items);
           }
         }
       } catch (e) {

@@ -17,16 +17,20 @@ const Index = () => {
     items, setItems, people, setPeople, subtotal, tax, total,
     calculatedSubtotal, hasMatch, addItem, updateItem, deleteItem,
     addPerson, removePerson, toggleAssignment, calculateSplit, loadReceiptData, reset,
+    setSubtotal, setTax, setTotal,
   } = useReceiptState();
 
   const handleItemsUpdate = useCallback((newItems: typeof items) => setItems(newItems), [setItems]);
   const handlePeopleUpdate = useCallback((newPeople: typeof people) => setPeople(newPeople), [setPeople]);
-  const handleReceiptDataUpdate = useCallback((data: { subtotal: number; tax: number; total: number; items?: typeof items }) => {
-    // Use loadReceiptData which should handle all the receipt data including subtotal, tax, total
-    if (data.items) {
-      loadReceiptData(data);
-    }
-  }, [loadReceiptData]);
+  
+  const handleReceiptDataUpdate = useCallback((data: { subtotal: number; tax: number; total: number; items: typeof items }) => {
+    // Update items separately through setItems to avoid conflicts
+    setItems(data.items);
+    // Update receipt totals
+    setSubtotal(data.subtotal);
+    setTax(data.tax);
+    setTotal(data.total);
+  }, [setItems, setSubtotal, setTax, setTotal]);
 
   const { isConnected, connectedUsers, sendItems, sendPeople, sendSync } = useWebSocket({
     sessionId, 
@@ -40,6 +44,7 @@ const Index = () => {
     if (isConnected && (items.length > 0 || people.length > 0)) {
       // Use setTimeout to avoid sending on every state change
       const timer = setTimeout(() => {
+        console.log('Syncing state:', { items: items.length, people: people.length, subtotal, tax, total });
         sendSync(items, people, subtotal, tax, total);
       }, 100);
       return () => clearTimeout(timer);
