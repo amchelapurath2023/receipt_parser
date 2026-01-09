@@ -52,8 +52,7 @@ func main(){
 	code := fiber.StatusInternalServerError
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:8080",
-		Access-Control-Allow-Origin: "https://receiptparser-production.up.railway.app",
+		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept",
 		AllowMethods: "GET,POST,OPTIONS",
 	}))
