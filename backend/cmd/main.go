@@ -211,5 +211,11 @@ func main(){
 		}
 	}))
 
-	app.Listen(":8000")
+	port := os.Getenv("PORT")
+    if port == "" {
+        port = "8000" 
+    }
+
+    app.Listen("0.0.0.0:" + port)
+
 }
