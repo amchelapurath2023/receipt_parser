@@ -2,7 +2,7 @@ const isProd = import.meta.env.PROD;
 
 const BASE_DOMAIN = isProd 
     ? 'backend-receiptparser-production.up.railway.app' 
-    : 'localhost:8000';
+    : 'localhost:8080';
 
 const httpProtocol = isProd ? 'https' : 'http';
 const wsProtocol = isProd ? 'wss' : 'ws';
