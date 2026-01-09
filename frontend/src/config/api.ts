@@ -1,6 +1,14 @@
-// Configure these to point to your Go backend
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-export const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+const isProd = import.meta.env.PROD;
+
+const BASE_DOMAIN = isProd 
+    ? 'backend-receiptparser-production.up.railway.app' 
+    : 'localhost:8000';
+
+const httpProtocol = isProd ? 'https' : 'http';
+const wsProtocol = isProd ? 'wss' : 'ws';
+
+export const API_BASE_URL = `${httpProtocol}://${BASE_DOMAIN}`;
+export const WS_BASE_URL = `${wsProtocol}://${BASE_DOMAIN}`;
 
 export const endpoints = {
   upload: `${API_BASE_URL}/upload`,

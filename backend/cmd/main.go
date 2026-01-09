@@ -51,7 +51,7 @@ func main(){
 	code := fiber.StatusInternalServerError
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:8080",
+		AllowOrigins: "https://backend-receiptparser-production.up.railway.app, http://localhost:8080",
 		AllowHeaders: "Origin, Content-Type, Accept",
 		AllowMethods: "GET,POST,OPTIONS",
 	}))
@@ -172,16 +172,13 @@ func main(){
 
 	app.Get("/ws/:session", websocket.New(func(c *websocket.Conn) {
 		sessionID := c.Params("session")
-	
 		client := &Client{Conn: c}
-	
-		// Add client to room
+
 		roomsMu.Lock()
 		rooms[sessionID] = append(rooms[sessionID], client)
 		roomsMu.Unlock()
-	
+
 		defer func() {
-			// Remove client when disconnected
 			roomsMu.Lock()
 			clients := rooms[sessionID]
 			for i, cl := range clients {
@@ -190,26 +187,29 @@ func main(){
 					break
 				}
 			}
+			if len(rooms[sessionID]) == 0 {
+				delete(rooms, sessionID)
+			}
 			roomsMu.Unlock()
 			c.Close()
 		}()
-	
-		// Listen for messages from this client
-		for {
-			_, msg, err := c.ReadMessage()
-			if err != nil {
-				break // client disconnected
-			}
-	
 
+		for {
+			mt, msg, err := c.ReadMessage()
+			if err != nil {
+				break
+			}
+			// Broadcast to room
 			roomsMu.Lock()
 			for _, cl := range rooms[sessionID] {
 				if cl != client {
-					_ = cl.Conn.WriteMessage(websocket.TextMessage, msg)
+					_ = cl.Conn.WriteMessage(mt, msg)
 				}
 			}
 			roomsMu.Unlock()
 		}
+	}, websocket.Config{
+		CheckOrigin: func(r *http.Request) bool { return true },
 	}))
 
 	port := os.Getenv("PORT")
