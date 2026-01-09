@@ -17,19 +17,28 @@ const Index = () => {
     items, setItems, people, setPeople, subtotal, tax, total,
     calculatedSubtotal, hasMatch, addItem, updateItem, deleteItem,
     addPerson, removePerson, toggleAssignment, calculateSplit, loadReceiptData, reset,
+    setSubtotal, setTax, setTotal,
   } = useReceiptState();
 
   const handleItemsUpdate = useCallback((newItems: typeof items) => setItems(newItems), [setItems]);
   const handlePeopleUpdate = useCallback((newPeople: typeof people) => setPeople(newPeople), [setPeople]);
+  const handleReceiptDataUpdate = useCallback((data: { subtotal: number; tax: number; total: number }) => {
+    setSubtotal(data.subtotal);
+    setTax(data.tax);
+    setTotal(data.total);
+  }, [setSubtotal, setTax, setTotal]);
 
   const { isConnected, connectedUsers, sendItems, sendPeople, sendSync } = useWebSocket({
-    sessionId, onItemsUpdate: handleItemsUpdate, onPeopleUpdate: handlePeopleUpdate,
+    sessionId, 
+    onItemsUpdate: handleItemsUpdate, 
+    onPeopleUpdate: handlePeopleUpdate,
+    onReceiptDataUpdate: handleReceiptDataUpdate,
   });
 
   // Send full state sync when connection is established
   useEffect(() => {
     if (isConnected && (items.length > 0 || people.length > 0)) {
-      sendSync(items, people);
+      sendSync(items, people, subtotal, tax, total);
     }
   }, [isConnected]);
 
@@ -93,7 +102,7 @@ const Index = () => {
   // FIX: Send full sync when receipt is uploaded
   const handleUploadSuccess = useCallback((data: { items: typeof items; subtotal: number; tax: number; total: number; }) => { 
     loadReceiptData(data); 
-    sendSync(data.items, people);
+    sendSync(data.items, people, data.subtotal, data.tax, data.total);
   }, [loadReceiptData, sendSync, people]);
 
   const summaries = useMemo(() => calculateSplit(), [calculateSplit]);

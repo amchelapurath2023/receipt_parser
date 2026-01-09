@@ -6,6 +6,7 @@ interface UseWebSocketOptions {
   sessionId: string | null;
   onItemsUpdate: (items: ReceiptItem[]) => void;
   onPeopleUpdate: (people: Person[]) => void;
+  onReceiptDataUpdate?: (data: { subtotal: number; tax: number; total: number }) => void;
 }
 
 interface SyncMessage {
@@ -13,9 +14,9 @@ interface SyncMessage {
   payload: {
     items: ReceiptItem[];
     people: Person[];
-    subtotal?: number;
-    tax?: number;
-    total?: number;
+    subtotal: number;
+    tax: number;
+    total: number;
   };
 }
 
@@ -31,7 +32,7 @@ interface PeopleMessage {
 
 type WebSocketMessage = SyncMessage | ItemsMessage | PeopleMessage;
 
-export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate }: UseWebSocketOptions) {
+export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate, onReceiptDataUpdate }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState(1);
@@ -60,6 +61,13 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate }: UseWe
           // Handle full state sync
           if (data.payload.items) onItemsUpdate(data.payload.items);
           if (data.payload.people) onPeopleUpdate(data.payload.people);
+          if (onReceiptDataUpdate && data.payload.subtotal !== undefined) {
+            onReceiptDataUpdate({
+              subtotal: data.payload.subtotal,
+              tax: data.payload.tax,
+              total: data.payload.total
+            });
+          }
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
@@ -79,7 +87,7 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate }: UseWe
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-  }, [sessionId, onItemsUpdate, onPeopleUpdate]);
+  }, [sessionId, onItemsUpdate, onPeopleUpdate, onReceiptDataUpdate]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -102,11 +110,11 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate }: UseWe
     }
   }, []);
 
-  const sendSync = useCallback((items: ReceiptItem[], people: Person[]) => {
+  const sendSync = useCallback((items: ReceiptItem[], people: Person[], subtotal: number, tax: number, total: number) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ 
         type: 'sync', 
-        payload: { items, people } 
+        payload: { items, people, subtotal, tax, total } 
       }));
     }
   }, []);
