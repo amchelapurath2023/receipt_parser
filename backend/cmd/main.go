@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 	"os"
-	"net/http"
 )
 
 type Client struct{
