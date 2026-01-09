@@ -30,7 +30,14 @@ interface PeopleMessage {
   payload: Person[];
 }
 
-type WebSocketMessage = SyncMessage | ItemsMessage | PeopleMessage;
+interface UsersMessage {
+  type: 'users';
+  payload: {
+    count: number;
+  };
+}
+
+type WebSocketMessage = SyncMessage | ItemsMessage | PeopleMessage | UsersMessage;
 
 export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate, onReceiptDataUpdate }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -57,6 +64,8 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate, onRecei
           onItemsUpdate(data.payload);
         } else if (data.type === 'people') {
           onPeopleUpdate(data.payload);
+        } else if (data.type === 'users') {
+          setConnectedUsers(data.payload.count);
         } else if (data.type === 'sync') {
           console.log('Received sync:', data.payload);
           // Handle full state sync - let the receipt data handler take care of items

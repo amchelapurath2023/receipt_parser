@@ -18,6 +18,7 @@ import (
 	"time"
 	"os"
 	"log"
+	"encoding/json"
 )
 
 type Client struct{
@@ -42,10 +43,37 @@ type TextractResult struct {
 	Err error
 }
 
+type UserCountMessage struct {
+	Type    string `json:"type"`
+	Payload struct {
+		Count int `json:"count"`
+	} `json:"payload"`
+}
+
 var (
 	rooms = make(map[string][]*Client)
+	roomStates = make(map[string][]byte)
 	roomsMu sync.Mutex
 )
+
+func broadcastUserCount(sessionID string) {
+	roomsMu.Lock()
+	count := len(rooms[sessionID])
+	clients := rooms[sessionID]
+	roomsMu.Unlock()
+
+	msg := UserCountMessage{Type: "users"}
+	msg.Payload.Count = count
+	
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	for _, cl := range clients {
+		_ = cl.Conn.WriteMessage(websocket.TextMessage, data)
+	}
+}
 
 func main(){
 	app := fiber.New()
@@ -187,12 +215,6 @@ func main(){
 		return c.JSON(response)
 	})
 
-	var (
-		rooms      = make(map[string][]*Client)
-		roomStates = make(map[string][]byte) 
-		roomsMu    sync.Mutex
-	)
-
 	app.Get("/ws/:session", websocket.New(func(c *websocket.Conn) {
 		sessionID := c.Params("session")
 		client := &Client{Conn: c}
@@ -200,10 +222,14 @@ func main(){
 		roomsMu.Lock()
 		rooms[sessionID] = append(rooms[sessionID], client)
 
+		// Send current state to new client
 		if state, exists := roomStates[sessionID]; exists {
 			_ = c.WriteMessage(websocket.TextMessage, state)
 		}
 		roomsMu.Unlock()
+
+		// Broadcast updated user count
+		broadcastUserCount(sessionID)
 
 		defer func() {
 			roomsMu.Lock()
@@ -216,9 +242,13 @@ func main(){
 			}
 			if len(rooms[sessionID]) == 0 {
 				delete(rooms, sessionID)
-				delete(roomStates, sessionID) 
+				delete(roomStates, sessionID)
 			}
 			roomsMu.Unlock()
+			
+			// Broadcast updated user count after disconnect
+			broadcastUserCount(sessionID)
+			
 			c.Close()
 		}()
 
@@ -229,7 +259,7 @@ func main(){
 			}
 
 			roomsMu.Lock()
-			roomStates[sessionID] = msg 
+			roomStates[sessionID] = msg
 
 			for _, cl := range rooms[sessionID] {
 				if cl != client {
