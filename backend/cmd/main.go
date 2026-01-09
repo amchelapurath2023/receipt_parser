@@ -51,7 +51,7 @@ func main(){
 	code := fiber.StatusInternalServerError
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "https://receiptparser-production.up.railway.app, http://localhost:8080",
+		AllowOrigins: "https://receiptparser-production.up.railway.app,http://localhost:8080",
 		AllowHeaders: "Origin, Content-Type, Accept",
 		AllowMethods: "GET,POST,OPTIONS",
 	}))
@@ -76,6 +76,7 @@ func main(){
 		if err != nil {
 			return c.Status(code).SendString("File could not be opened")
 		}
+		defer stream.Close()
 
 		ctx := context.TODO()
 		cfg, err := config.LoadDefaultConfig(ctx)
@@ -96,16 +97,20 @@ func main(){
 			},
 		})
 
-
 		if err != nil {
 			return c.Status(code).SendString("File couldn't be parsed")
+		}
+
+		// Safety check
+		if len(resp.ExpenseDocuments) == 0 {
+			return c.Status(code).SendString("No receipt data found")
 		}
 
 		var items []LineItem
 		var subtotal float64
 		var tax float64
 		var total float64
-		cum_sum := 0.0
+		var cumSum float64
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -113,28 +118,29 @@ func main(){
 		go func() {
 			defer wg.Done()
 			for _, field := range resp.ExpenseDocuments[0].SummaryFields {
-				if aws.ToString(field.Type.Text) == "TAX" {
+				fieldType := aws.ToString(field.Type.Text)
+				if fieldType == "TAX" {
 					tax, _ = strconv.ParseFloat(aws.ToString(field.ValueDetection.Text), 64)
 				}
-				if aws.ToString(field.Type.Text) == "TOTAL" {
+				if fieldType == "TOTAL" {
 					total, _ = strconv.ParseFloat(aws.ToString(field.ValueDetection.Text), 64)
 				}
-				if aws.ToString(field.Type.Text) == "SUBTOTAL"{
+				if fieldType == "SUBTOTAL" {
 					subtotal, _ = strconv.ParseFloat(aws.ToString(field.ValueDetection.Text), 64)
-				}
-				if tax != 0 && subtotal !=0 {
-					break
 				}
 			}
 			if total == 0 {
-				total = subtotal+tax
+				total = subtotal + tax
 			}
-
 		}()
 
 		go func() {
 			defer wg.Done()
-		
+			
+			if len(resp.ExpenseDocuments[0].LineItemGroups) == 0 {
+				return
+			}
+			
 			for _, lineItem := range resp.ExpenseDocuments[0].LineItemGroups[0].LineItems {
 				var itemName string
 				var itemPrice float64
@@ -146,25 +152,30 @@ func main(){
 					}
 					if fieldType == "PRICE" {
 						fields := strings.Fields(fieldValue)
-						clean := fields[0]
-						itemPrice, _ = strconv.ParseFloat(clean, 64)
+						if len(fields) > 0 {
+							clean := fields[0]
+							itemPrice, _ = strconv.ParseFloat(clean, 64)
+						}
 					}
 				}
-				cum_sum += itemPrice
+				cumSum += itemPrice
 				items = append(items, LineItem{Item: itemName, Price: itemPrice})
 			}
 		}()
 
 		wg.Wait()
 
-		matches := (subtotal - cum_sum) < 0.01
+		matches := false
+		if subtotal > 0 {
+			matches = (subtotal - cumSum) < 0.01 && (subtotal - cumSum) > -0.01
+		}
 
 		response := ReceiptResponse{
-			Items:   items,
-			Subtotal:   subtotal,
-			Total:   total,
-			Tax:     tax,
-			Matches: matches,
+			Items:    items,
+			Subtotal: subtotal,
+			Total:    total,
+			Tax:      tax,
+			Matches:  matches,
 		}
 
 		return c.JSON(response)
@@ -209,15 +220,13 @@ func main(){
 			roomsMu.Unlock()
 		}
 	}, websocket.Config{
-		// Use "Origins" with a wildcard to allow all devices to connect
 		Origins: []string{"*"}, 
 	}))
 
 	port := os.Getenv("PORT")
-    if port == "" {
-        port = "8000" 
-    }
+	if port == "" {
+		port = "8000" 
+	}
 
-    app.Listen("0.0.0.0:" + port)
-
+	app.Listen("0.0.0.0:" + port)
 }
