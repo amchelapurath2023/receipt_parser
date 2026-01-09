@@ -210,7 +210,8 @@ func main(){
 			roomsMu.Unlock()
 		}
 	}, websocket.Config{
-		CheckOrigin: func(r *http.Request) bool { return true },
+		// Use "Origins" with a wildcard to allow all devices to connect
+		Origins: []string{"*"}, 
 	}))
 
 	port := os.Getenv("PORT")
