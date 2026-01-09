@@ -187,47 +187,59 @@ func main(){
 		return c.JSON(response)
 	})
 
+	var (
+		rooms       = make(map[string][]*Client)
+		roomData    = make(map[string][]byte) 
+		roomsMu     sync.Mutex
+	)
+
 	app.Get("/ws/:session", websocket.New(func(c *websocket.Conn) {
-		sessionID := c.Params("session")
-		client := &Client{Conn: c}
+        sessionID := c.Params("session")
+        client := &Client{Conn: c}
+    
+        roomsMu.Lock()
+        rooms[sessionID] = append(rooms[sessionID], client)
 
-		roomsMu.Lock()
-		rooms[sessionID] = append(rooms[sessionID], client)
-		roomsMu.Unlock()
+        if data, exists := roomData[sessionID]; exists {
+            _ = c.WriteMessage(websocket.TextMessage, data)
+        }
+        roomsMu.Unlock()
 
-		defer func() {
-			roomsMu.Lock()
-			clients := rooms[sessionID]
-			for i, cl := range clients {
-				if cl == client {
-					rooms[sessionID] = append(clients[:i], clients[i+1:]...)
-					break
-				}
-			}
-			if len(rooms[sessionID]) == 0 {
-				delete(rooms, sessionID)
-			}
-			roomsMu.Unlock()
-			c.Close()
-		}()
+        defer func() {
+            roomsMu.Lock()
+            clients := rooms[sessionID]
+            for i, cl := range clients {
+                if cl == client {
+                    rooms[sessionID] = append(clients[:i], clients[i+1:]...)
+                    break
+                }
+            }
+            if len(rooms[sessionID]) == 0 {
+                delete(rooms, sessionID)
+            }
+            roomsMu.Unlock()
+            c.Close()
+        }()
 
-		for {
-			mt, msg, err := c.ReadMessage()
-			if err != nil {
-				break
-			}
-			// Broadcast to room
-			roomsMu.Lock()
-			for _, cl := range rooms[sessionID] {
-				if cl != client {
-					_ = cl.Conn.WriteMessage(mt, msg)
-				}
-			}
-			roomsMu.Unlock()
-		}
-	}, websocket.Config{
-		Origins: []string{"*"}, 
-	}))
+        for {
+            mt, msg, err := c.ReadMessage()
+            if err != nil {
+                break
+            }
+            
+            roomsMu.Lock()
+            roomData[sessionID] = msg 
+            
+            for _, cl := range rooms[sessionID] {
+                if cl != client {
+                    _ = cl.Conn.WriteMessage(mt, msg)
+                }
+            }
+            roomsMu.Unlock()
+        }
+    }, websocket.Config{
+        Origins: []string{"*"}, 
+    }))
 
 	port := os.Getenv("PORT")
 	if port == "" {
