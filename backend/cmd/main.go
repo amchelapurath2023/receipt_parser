@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"os"
 )
 
 type Client struct{
