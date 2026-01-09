@@ -6,7 +6,7 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 
 ## 📸 Demo
 
-![Demo](assets/demo.gif)
+![Demo](assets/demov2.gif)
 
 ---
 
