@@ -61,7 +61,7 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate }: UseWe
 
   const sendItems = useCallback((items: ReceiptItem[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'items', payload: items }));
+      wsRef.current.send(JSON.stringify({ type: 'sync', payload: items }));
     }
   }, []);
 
