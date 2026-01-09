@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 	"os"
+	"log"
 )
 
 type Client struct{
@@ -69,11 +70,13 @@ func main(){
 	app.Post("/upload", func(c *fiber.Ctx) error {
 		file, err := c.FormFile("receipt")
 		if err != nil {
+			log.Printf("File upload error: %v", err)
 			return c.Status(code).SendString("File could not be uploaded")
 		}
 
 		stream, err := file.Open()
 		if err != nil {
+			log.Printf("File open error: %v", err)
 			return c.Status(code).SendString("File could not be opened")
 		}
 		defer stream.Close()
@@ -81,6 +84,7 @@ func main(){
 		ctx := context.TODO()
 		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
+			log.Printf("AWS config error: %v", err)
 			return c.Status(code).SendString("Couldn't get AWS configs")
 		}
 
@@ -88,6 +92,7 @@ func main(){
 
 		buf := bytes.NewBuffer(nil)
 		if _, err := io.Copy(buf, stream); err != nil {
+			log.Printf("File copy error: %v", err)
 			return c.Status(code).SendString("File was probably too large")
 		}
 
@@ -98,11 +103,12 @@ func main(){
 		})
 
 		if err != nil {
+			log.Printf("Textract error: %v", err)
 			return c.Status(code).SendString("File couldn't be parsed")
 		}
 
-		// Safety check
 		if len(resp.ExpenseDocuments) == 0 {
+			log.Printf("No expense documents found")
 			return c.Status(code).SendString("No receipt data found")
 		}
 
