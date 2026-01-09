@@ -13,20 +13,20 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 ## ⚙️ Tech Stack
 
 - **Backend**: [Go Fiber](https://gofiber.io/) — for fast, minimalist API development  
-- **Frontend**: [React](https://react.dev/) + [PrimeReact](https://primereact.org/) — for dynamic tables and UI  
+- **Frontend**: [React](https://react.dev/) + [Tailwind CSS](https://tailwindcss.com/) + [Shadcn/UI](https://ui.shadcn.com/) — For a modern, responsive, and accessible interface.
 - **OCR**: [Amazon Textract](https://aws.amazon.com/textract/) — to extract structured line items from receipts  
 
 ---
 
 ## 📥 How It Works
 
-1. Upload a **one-page grocery receipt** (Haven't tested with photos yet).
+1. Upload a **one-page grocery receipt**.
 2. Amazon Textract analyzes the receipt and extracts:
    - Each line item (item name, price)
    - The subtotal and tax
 3. A dynamic table displays the parsed items. You can:
    - Edit item names and prices
-   - Assign people to each item (comma-separated)
+   - Assign people to each item
    - Add or delete items
 4. The app shows whether the total matches the sum of all items.
 5. Click **Calculate** to download a CSV with each person’s total (tax distributed proportionally).
@@ -34,48 +34,3 @@ A lightweight web application that parses grocery receipts from **PDF files** an
 > 💡 **Note**: If your receipt is longer than one page, use an [online tool] to flatten it into a single-page PDF. Amazon Textract’s `AnalyzeExpense` does not currently support multi-page PDFs directly from memory. NOT SPONOSORED: https://avepdf.com/convert-to-one-page-pdf
 
 ---
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- [Docker](https://www.docker.com/)
-- AWS credentials with permission to use Textract
-- [Golang](https://go.dev/)
-- [React](https://react.dev/)
-- [Prime React](https://react.dev/)
-
-## 🔧 Setup Instructions
-
-### 1. Clone the Repository
-
-```
-git clone https://github.com/your-username/receipt-parser.git
-cd receipt-parser
-```
-
-### 2. Create Your Environment File
-```
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-S3_BUCKET=your-s3-bucket-name
-```
-Make sure your IAM user has permission to use Amazon Textract.
-
-
-### 3. Start the Backend (Go + Fiber via Docker)
-`docker compose up --build`
-
-
-### 4. Start the Frontend (React App)
-Open a new terminal tab and run:
-```
-cd frontend
-npm install
-npm run start
-```
-
-### 5. Open in Browser
-Visit your app at: http://localhost:3000
-
