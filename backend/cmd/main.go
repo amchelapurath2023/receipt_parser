@@ -57,7 +57,7 @@ func main(){
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max: 5,
+		Max: 1000,
 		Expiration: 1 * time.Minute,
 	}))
 	

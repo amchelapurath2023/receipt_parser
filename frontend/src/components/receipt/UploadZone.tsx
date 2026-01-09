@@ -29,7 +29,6 @@ export function UploadZone({ onUploadSuccess, sessionId }: UploadZoneProps) {
   const [preview, setPreview] = useState<string | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
-    // Define allowed types
     const allowedTypes = ['image/jpeg', 'image/jpg', 'application/pdf'];
     
     if (!allowedTypes.includes(file.type)) {
@@ -44,7 +43,7 @@ export function UploadZone({ onUploadSuccess, sessionId }: UploadZoneProps) {
       reader.onload = (e) => setPreview(e.target?.result as string);
       reader.readAsDataURL(file);
     } else {
-      setPreview(null); // Clear preview for PDFs unless you have a PDF icon
+      setPreview(null); 
     }
 
     // Show preview
@@ -76,7 +75,6 @@ export function UploadZone({ onUploadSuccess, sessionId }: UploadZoneProps) {
       // Transform backend response to our format
       const items: ReceiptItem[] = (data.items || []).map((item: any, index: number) => ({
         id: crypto.randomUUID(),
-        // Change item.name to item.item_name to match your Go struct
         name: item.item_name || `Item ${index + 1}`, 
         price: item.price || 0,
         assignedTo: [],
