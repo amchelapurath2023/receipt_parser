@@ -17,16 +17,16 @@ const Index = () => {
     items, setItems, people, setPeople, subtotal, tax, total,
     calculatedSubtotal, hasMatch, addItem, updateItem, deleteItem,
     addPerson, removePerson, toggleAssignment, calculateSplit, loadReceiptData, reset,
-    setSubtotal, setTax, setTotal,
   } = useReceiptState();
 
   const handleItemsUpdate = useCallback((newItems: typeof items) => setItems(newItems), [setItems]);
   const handlePeopleUpdate = useCallback((newPeople: typeof people) => setPeople(newPeople), [setPeople]);
-  const handleReceiptDataUpdate = useCallback((data: { subtotal: number; tax: number; total: number }) => {
-    setSubtotal(data.subtotal);
-    setTax(data.tax);
-    setTotal(data.total);
-  }, [setSubtotal, setTax, setTotal]);
+  const handleReceiptDataUpdate = useCallback((data: { subtotal: number; tax: number; total: number; items?: typeof items }) => {
+    // Use loadReceiptData which should handle all the receipt data including subtotal, tax, total
+    if (data.items) {
+      loadReceiptData(data);
+    }
+  }, [loadReceiptData]);
 
   const { isConnected, connectedUsers, sendItems, sendPeople, sendSync } = useWebSocket({
     sessionId, 
@@ -38,26 +38,30 @@ const Index = () => {
   // Send full state sync when connection is established
   useEffect(() => {
     if (isConnected && (items.length > 0 || people.length > 0)) {
-      sendSync(items, people, subtotal, tax, total);
+      // Use setTimeout to avoid sending on every state change
+      const timer = setTimeout(() => {
+        sendSync(items, people, subtotal, tax, total);
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isConnected]);
 
   const handleUpdateItem = useCallback((id: string, updates: Partial<typeof items[0]>) => {
     const updatedItems = items.map(item => item.id === id ? { ...item, ...updates } : item);
     updateItem(id, updates);
-    sendItems(updatedItems);
-  }, [updateItem, items, sendItems]);
+    sendSync(updatedItems, people, subtotal, tax, total);
+  }, [updateItem, items, people, subtotal, tax, total, sendSync]);
 
   const handleDeleteItem = useCallback((id: string) => { 
     const filteredItems = items.filter(item => item.id !== id);
     deleteItem(id); 
-    sendItems(filteredItems); 
-  }, [deleteItem, items, sendItems]);
+    sendSync(filteredItems, people, subtotal, tax, total);
+  }, [deleteItem, items, people, subtotal, tax, total, sendSync]);
 
   const handleAddItem = useCallback(() => { 
     const newItem = addItem(); 
-    sendItems([...items, newItem]); 
-  }, [addItem, items, sendItems]);
+    sendSync([...items, newItem], people, subtotal, tax, total);
+  }, [addItem, items, people, subtotal, tax, total, sendSync]);
 
   // FIX: Now syncs item assignments
   const handleToggleAssignment = useCallback((itemId: string, personName: string) => {
@@ -75,19 +79,19 @@ const Index = () => {
       }
       return item;
     });
-    sendItems(updatedItems);
-  }, [toggleAssignment, items, sendItems]);
+    sendSync(updatedItems, people, subtotal, tax, total);
+  }, [toggleAssignment, items, people, subtotal, tax, total, sendSync]);
 
   const handleAddPerson = useCallback((name: string) => { 
     const newPerson = addPerson(name); 
-    sendPeople([...people, newPerson]); 
-  }, [addPerson, people, sendPeople]);
+    sendSync(items, [...people, newPerson], subtotal, tax, total);
+  }, [addPerson, items, people, subtotal, tax, total, sendSync]);
 
   const handleRemovePerson = useCallback((id: string) => { 
     const filteredPeople = people.filter(p => p.id !== id);
     removePerson(id); 
-    sendPeople(filteredPeople); 
-  }, [removePerson, people, sendPeople]);
+    sendSync(items, filteredPeople, subtotal, tax, total);
+  }, [removePerson, items, people, subtotal, tax, total, sendSync]);
 
   const handleJoinSession = useCallback((newSessionId: string) => { 
     reset(); 

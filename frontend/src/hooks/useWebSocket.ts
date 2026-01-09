@@ -6,7 +6,7 @@ interface UseWebSocketOptions {
   sessionId: string | null;
   onItemsUpdate: (items: ReceiptItem[]) => void;
   onPeopleUpdate: (people: Person[]) => void;
-  onReceiptDataUpdate?: (data: { subtotal: number; tax: number; total: number }) => void;
+  onReceiptDataUpdate?: (data: { subtotal: number; tax: number; total: number; items?: ReceiptItem[] }) => void;
 }
 
 interface SyncMessage {
@@ -61,11 +61,12 @@ export function useWebSocket({ sessionId, onItemsUpdate, onPeopleUpdate, onRecei
           // Handle full state sync
           if (data.payload.items) onItemsUpdate(data.payload.items);
           if (data.payload.people) onPeopleUpdate(data.payload.people);
-          if (onReceiptDataUpdate && data.payload.subtotal !== undefined) {
+          if (onReceiptDataUpdate) {
             onReceiptDataUpdate({
               subtotal: data.payload.subtotal,
               tax: data.payload.tax,
-              total: data.payload.total
+              total: data.payload.total,
+              items: data.payload.items
             });
           }
         }
