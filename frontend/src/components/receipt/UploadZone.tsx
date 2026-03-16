@@ -59,7 +59,7 @@ export function UploadZone({ onUploadSuccess, sessionId }: UploadZoneProps) {
       formData.append('receipt', file);
       formData.append('session', sessionId);
 
-      const response = await fetch(endpoints.upload, {
+      const response = await fetch(`${endpoints.upload}?session=${sessionId}`, {
         method: 'POST',
         body: formData,
       });
