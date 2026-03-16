@@ -1,46 +1,47 @@
 package main
 
 import (
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/websocket/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/aws/aws-sdk-go-v2/service/textract"
-	"github.com/aws/aws-sdk-go-v2/service/textract/types"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"context"
 	"bytes"
+	"context"
+	"encoding/json"
 	"io"
-	"strings"
+	"log"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"os"
-	"log"
-	"encoding/json"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/textract"
+	"github.com/aws/aws-sdk-go-v2/service/textract/types"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/websocket/v2"
 )
 
-type Client struct{
+type Client struct {
 	Conn *websocket.Conn
 }
 
 type LineItem struct {
-	Item string `json:"item_name"`
+	Item  string  `json:"item_name"`
 	Price float64 `json:"price"`
 }
 
 type ReceiptResponse struct {
-	Items []LineItem `json:"items"`
-	Subtotal float64 `json:"subtotal"`
-	Total float64 `json:"total"`
-	Tax float64 `json:"tax"`
-	Matches bool `json:"matches"`
+	Items    []LineItem `json:"items"`
+	Subtotal float64    `json:"subtotal"`
+	Total    float64    `json:"total"`
+	Tax      float64    `json:"tax"`
+	Matches  bool       `json:"matches"`
 }
 
 type TextractResult struct {
 	Response *textract.AnalyzeExpenseOutput
-	Err error
+	Err      error
 }
 
 type UserCountMessage struct {
@@ -51,9 +52,9 @@ type UserCountMessage struct {
 }
 
 var (
-	rooms = make(map[string][]*Client)
+	rooms      = make(map[string][]*Client)
 	roomStates = make(map[string][]byte)
-	roomsMu sync.Mutex
+	roomsMu    sync.Mutex
 )
 
 func broadcastUserCount(sessionID string) {
@@ -64,7 +65,7 @@ func broadcastUserCount(sessionID string) {
 
 	msg := UserCountMessage{Type: "users"}
 	msg.Payload.Count = count
-	
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return
@@ -75,7 +76,12 @@ func broadcastUserCount(sessionID string) {
 	}
 }
 
-func main(){
+func isNumeric(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
+func main() {
 	app := fiber.New()
 	code := fiber.StatusInternalServerError
 
@@ -86,14 +92,13 @@ func main(){
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max: 1000,
+		Max:        1000,
 		Expiration: 1 * time.Minute,
 	}))
-	
+
 	app.Get("/healthz", func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
-	
 
 	app.Post("/upload", func(c *fiber.Ctx) error {
 		file, err := c.FormFile("receipt")
@@ -148,7 +153,7 @@ func main(){
 
 		var wg sync.WaitGroup
 		wg.Add(2)
-		
+
 		go func() {
 			defer wg.Done()
 			for _, field := range resp.ExpenseDocuments[0].SummaryFields {
@@ -167,14 +172,14 @@ func main(){
 				total = subtotal + tax
 			}
 		}()
-
+		var coupon bool
 		go func() {
 			defer wg.Done()
-			
+
 			if len(resp.ExpenseDocuments[0].LineItemGroups) == 0 {
 				return
 			}
-			
+
 			for _, lineItem := range resp.ExpenseDocuments[0].LineItemGroups[0].LineItems {
 				var itemName string
 				var itemPrice float64
@@ -182,18 +187,33 @@ func main(){
 					fieldType := aws.ToString(field.Type.Text)
 					fieldValue := aws.ToString(field.ValueDetection.Text)
 					if fieldType == "ITEM" {
+						if isNumeric(fieldValue) {
+							coupon = true
+						}
 						itemName = fieldValue
 					}
 					if fieldType == "PRICE" {
 						fields := strings.Fields(fieldValue)
+						if coupon == true {
+							if len(fields) > 0 {
+								clean := fields[0]
+								itemPrice, _ = strconv.ParseFloat(clean, 64)
+							}
+						}
 						if len(fields) > 0 {
 							clean := fields[0]
 							itemPrice, _ = strconv.ParseFloat(clean, 64)
 						}
 					}
 				}
-				cumSum += itemPrice
-				items = append(items, LineItem{Item: itemName, Price: itemPrice})
+				if coupon {
+					cumSum -= itemPrice
+					items[len(items)-1].Price -= itemPrice
+					coupon = false
+				} else {
+					cumSum += itemPrice
+					items = append(items, LineItem{Item: itemName, Price: itemPrice})
+				}
 			}
 		}()
 
@@ -201,7 +221,7 @@ func main(){
 
 		matches := false
 		if subtotal > 0 {
-			matches = (subtotal - cumSum) < 0.01 && (subtotal - cumSum) > -0.01
+			matches = (subtotal-cumSum) < 0.01 && (subtotal-cumSum) > -0.01
 		}
 
 		response := ReceiptResponse{
@@ -245,10 +265,10 @@ func main(){
 				delete(roomStates, sessionID)
 			}
 			roomsMu.Unlock()
-			
+
 			// Broadcast updated user count after disconnect
 			broadcastUserCount(sessionID)
-			
+
 			c.Close()
 		}()
 
@@ -274,7 +294,7 @@ func main(){
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8000" 
+		port = "8000"
 	}
 
 	app.Listen("0.0.0.0:" + port)
