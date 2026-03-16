@@ -197,14 +197,9 @@ func main() {
 					}
 					if fieldType == "PRICE" {
 						fields := strings.Fields(fieldValue)
-						if coupon == true {
-							if len(fields) > 0 {
-								clean := fields[0]
-								itemPrice, _ = strconv.ParseFloat(clean, 64)
-							}
-						}
 						if len(fields) > 0 {
 							clean := fields[0]
+							clean = strings.TrimSuffix(clean, "-")
 							itemPrice, _ = strconv.ParseFloat(clean, 64)
 						}
 					}
