@@ -76,7 +76,10 @@ func broadcastUserCount(sessionID string) {
 	}
 }
 
-func isNumeric(s string) bool {
+func isCouponCode(s string) bool {
+	if s[0] == '/' {
+		s = s[1:]
+	}
 	_, err := strconv.ParseFloat(s, 64)
 	return err == nil
 }
@@ -187,7 +190,7 @@ func main() {
 					fieldType := aws.ToString(field.Type.Text)
 					fieldValue := aws.ToString(field.ValueDetection.Text)
 					if fieldType == "ITEM" {
-						if isNumeric(fieldValue) {
+						if isCouponCode(fieldValue) {
 							coupon = true
 						}
 						itemName = fieldValue
