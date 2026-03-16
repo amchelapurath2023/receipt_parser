@@ -20,6 +20,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/websocket/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 type Client struct {
@@ -52,10 +53,32 @@ type UserCountMessage struct {
 }
 
 var (
-	rooms      = make(map[string][]*Client)
-	roomStates = make(map[string][]byte)
-	roomsMu    sync.Mutex
+	rooms   = make(map[string][]*Client)
+	roomsMu sync.Mutex
+	rdb     *redis.Client
 )
+
+const sessionTTL = 30 * 24 * time.Hour // 1 month expiration
+
+func sessionKey(sessionID string) string {
+	return "session:" + sessionID
+}
+
+func getSessionState(ctx context.Context, sessionID string) ([]byte, error) {
+	data, err := rdb.Get(ctx, sessionKey(sessionID)).Bytes()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	return data, err
+}
+
+func setSessionState(ctx context.Context, sessionID string, data []byte) error {
+	return rdb.Set(ctx, sessionKey(sessionID), data, sessionTTL).Err()
+}
+
+func clearSessionState(ctx context.Context, sessionID string) error {
+	return rdb.Del(ctx, sessionKey(sessionID)).Err()
+}
 
 func broadcastUserCount(sessionID string) {
 	roomsMu.Lock()
@@ -75,6 +98,18 @@ func broadcastUserCount(sessionID string) {
 		_ = cl.Conn.WriteMessage(websocket.TextMessage, data)
 	}
 }
+func broadcastToRoom(sessionID string, mt int, msg []byte, exclude *Client) {
+	roomsMu.Lock()
+	clients := make([]*Client, len(rooms[sessionID]))
+	copy(clients, rooms[sessionID])
+	roomsMu.Unlock()
+
+	for _, cl := range clients {
+		if cl != exclude {
+			_ = cl.Conn.WriteMessage(mt, msg)
+		}
+	}
+}
 
 func isCouponCode(s string) bool {
 	if s[0] == '/' {
@@ -84,14 +119,35 @@ func isCouponCode(s string) bool {
 	return err == nil
 }
 
+func initRedis() *redis.Client {
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("Failed to parse REDIS_URL: %v", err)
+	}
+	client := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	log.Println("Connected to Redis")
+	return client
+}
+
 func main() {
+	rdb = initRedis()
+	defer rdb.Close()
 	app := fiber.New()
 	code := fiber.StatusInternalServerError
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept",
-		AllowMethods: "GET,POST,OPTIONS",
+		AllowMethods: "GET,POST,DELETE,OPTIONS",
 	}))
 
 	app.Use(limiter.New(limiter.Config{
@@ -104,6 +160,12 @@ func main() {
 	})
 
 	app.Post("/upload", func(c *fiber.Ctx) error {
+
+		sessionID := c.Query("session")
+		if sessionID == "" {
+			return c.Status(fiber.StatusBadRequest).SendString("session query param required")
+		}
+
 		file, err := c.FormFile("receipt")
 		if err != nil {
 			log.Printf("File upload error: %v", err)
@@ -230,7 +292,42 @@ func main() {
 			Matches:  matches,
 		}
 
+		stateJSON, err := json.Marshal(response)
+		if err != nil {
+			log.Printf("JSON marshal error: %v", err)
+			return c.Status(code).SendString("Failed to serialize response")
+		}
+		if err := setSessionState(ctx, sessionID, stateJSON); err != nil {
+			log.Printf("Redis set error: %v", err)
+		}
+		broadcastToRoom(sessionID, websocket.TextMessage, stateJSON, nil)
+
 		return c.JSON(response)
+	})
+
+	// GET session state
+	app.Get("/session/:session", func(c *fiber.Ctx) error {
+		sessionID := c.Params("session")
+		data, err := getSessionState(context.Background(), sessionID)
+		if err != nil {
+			return c.Status(code).SendString("Failed to retrieve session")
+		}
+		if data == nil {
+			return c.Status(fiber.StatusNotFound).SendString("No session found")
+		}
+		c.Set("Content-Type", "application/json")
+		return c.Send(data)
+	})
+
+	// DELETE (reset) session
+	app.Delete("/session/:session", func(c *fiber.Ctx) error {
+		sessionID := c.Params("session")
+		if err := clearSessionState(context.Background(), sessionID); err != nil {
+			return c.Status(code).SendString("Failed to clear session")
+		}
+		cleared, _ := json.Marshal(map[string]string{"type": "cleared"})
+		broadcastToRoom(sessionID, websocket.TextMessage, cleared, nil)
+		return c.SendString("session cleared")
 	})
 
 	app.Get("/ws/:session", websocket.New(func(c *websocket.Conn) {
@@ -241,10 +338,11 @@ func main() {
 		rooms[sessionID] = append(rooms[sessionID], client)
 
 		// Send current state to new client
-		if state, exists := roomStates[sessionID]; exists {
+
+		roomsMu.Unlock()
+		if state, err := getSessionState(context.Background(), sessionID); err == nil && state != nil {
 			_ = c.WriteMessage(websocket.TextMessage, state)
 		}
-		roomsMu.Unlock()
 
 		// Broadcast updated user count
 		broadcastUserCount(sessionID)
@@ -260,7 +358,6 @@ func main() {
 			}
 			if len(rooms[sessionID]) == 0 {
 				delete(rooms, sessionID)
-				delete(roomStates, sessionID)
 			}
 			roomsMu.Unlock()
 
@@ -276,15 +373,8 @@ func main() {
 				break
 			}
 
-			roomsMu.Lock()
-			roomStates[sessionID] = msg
-
-			for _, cl := range rooms[sessionID] {
-				if cl != client {
-					_ = cl.Conn.WriteMessage(mt, msg)
-				}
-			}
-			roomsMu.Unlock()
+			_ = setSessionState(context.Background(), sessionID, msg)
+			broadcastToRoom(sessionID, mt, msg, client)
 		}
 	}, websocket.Config{
 		Origins: []string{"*"},
